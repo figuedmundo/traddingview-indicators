@@ -1,0 +1,139 @@
+//@version=6
+indicator("SFX Algo Replica [Antigravity]", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// --- INPUTS ---
+group_settings = "Settings"
+sensitivity = input.string("Medium", "Sensitivity", options=["High", "Medium", "Low"], group=group_settings)
+use_candles = input.bool(true, "Color Candles", group=group_settings)
+show_internals = input.bool(false, "Show Internal Signals", group=group_settings)
+
+// --- PARAMETERS BASED ON SENSITIVITY ---
+var int len_fast = 12
+var int len_slow = 26
+var int len_rsi = 14
+var float mult_atr = 2.0
+var int len_atr = 14
+
+if sensitivity == "High"
+    len_fast := 9
+    len_slow := 21
+    len_rsi := 7
+    mult_atr := 1.5
+else if sensitivity == "Low"
+    len_fast := 20
+    len_slow := 50
+    len_rsi := 21
+    mult_atr := 3.0
+
+// --- INDICATORS (THE EXPERTS) ---
+// 1. Trend: EMA Crossover
+ema_fast = ta.ema(close, len_fast)
+ema_slow = ta.ema(close, len_slow)
+trend_bullish = ema_fast > ema_slow
+trend_bearish = ema_fast < ema_slow
+
+// 2. Momentum: RSI
+rsi = ta.rsi(close, len_rsi)
+mom_bullish = rsi > 50
+mom_bearish = rsi < 50
+
+// 3. Volatility/Trend: Supertrend
+[supertrend, dir] = ta.supertrend(mult_atr, len_atr)
+st_bullish = dir < 0
+st_bearish = dir > 0
+
+// 4. Volatility: ATR
+atr = ta.atr(len_atr)
+
+// --- WEIGHTED MAJORITY LOGIC ---
+// Assign weights to experts
+w_trend = 2
+w_mom = 1
+w_st = 2
+
+score_bull = (trend_bullish ? w_trend : 0) + (mom_bullish ? w_mom : 0) + (st_bullish ? w_st : 0)
+score_bear = (trend_bearish ? w_trend : 0) + (mom_bearish ? w_mom : 0) + (st_bearish ? w_st : 0)
+
+// Threshold for signal (Majority)
+threshold = 3 // e.g., Trend + Momentum or Trend + Supertrend
+
+buy_signal = score_bull >= threshold and score_bull[1] < threshold
+sell_signal = score_bear >= threshold and score_bear[1] < threshold
+
+// --- DYNAMIC TP/SL LOGIC ---
+var float entry_price = na
+var float sl_level = na
+var float tp1_level = na
+var float tp2_level = na
+var float tp3_level = na
+var string trade_dir = na
+
+if buy_signal
+    entry_price := close
+    trade_dir := "long"
+    sl_level := close - (atr * mult_atr)
+    tp1_level := close + (atr * mult_atr * 1.5)
+    tp2_level := close + (atr * mult_atr * 2.5)
+    tp3_level := close + (atr * mult_atr * 3.5)
+
+if sell_signal
+    entry_price := close
+    trade_dir := "short"
+    sl_level := close + (atr * mult_atr)
+    tp1_level := close - (atr * mult_atr * 1.5)
+    tp2_level := close - (atr * mult_atr * 2.5)
+    tp3_level := close - (atr * mult_atr * 3.5)
+
+// Reset if price hits SL or TP3 (optional, for visualization mainly)
+// In a real strategy we would manage state more strictly, but for indicator overlay we just update on new signals usually.
+// However, to keep lines static until next signal:
+// (Logic above resets on every new signal, which is standard for this type of indicator)
+
+// --- VISUALS ---
+
+// Candle Coloring
+barcolor(use_candles ? (score_bull >= threshold ? color.new(color.green, 0) : (score_bear >= threshold ? color.new(color.red, 0) : color.new(color.gray, 50))) : na)
+
+// Signals
+plotshape(buy_signal, "Buy", shape.labelup, location.belowbar, color.green, 0, "BUY", color.white)
+plotshape(sell_signal, "Sell", shape.labeldown, location.abovebar, color.red, 0, "SELL", color.white)
+
+// TP/SL Lines (Only show for active latest signal to avoid clutter)
+// We use `line.new` for better control or `plot` with condition. `plot` is easier but connects lines.
+// Let's use `line.new` to draw distinct levels for the *last* signal.
+var line l_sl = na
+var line l_tp1 = na
+var line l_tp2 = na
+var line l_tp3 = na
+
+if buy_signal or sell_signal
+    line.delete(l_sl)
+    line.delete(l_tp1)
+    line.delete(l_tp2)
+    line.delete(l_tp3)
+    
+    l_sl := line.new(bar_index, sl_level, bar_index + 10, sl_level, color=color.red, style=line.style_solid)
+    l_tp1 := line.new(bar_index, tp1_level, bar_index + 10, tp1_level, color=color.green, style=line.style_dotted)
+    l_tp2 := line.new(bar_index, tp2_level, bar_index + 10, tp2_level, color=color.green, style=line.style_dashed)
+    l_tp3 := line.new(bar_index, tp3_level, bar_index + 10, tp3_level, color=color.green, style=line.style_solid)
+
+// Extend lines
+line.set_x2(l_sl, bar_index + 5)
+line.set_x2(l_tp1, bar_index + 5)
+line.set_x2(l_tp2, bar_index + 5)
+line.set_x2(l_tp3, bar_index + 5)
+
+// Labels for TP/SL
+var label lbl_sl = na
+var label lbl_tp3 = na
+
+if buy_signal or sell_signal
+    label.delete(lbl_sl)
+    label.delete(lbl_tp3)
+    lbl_sl := label.new(bar_index + 5, sl_level, "SL", color=color.red, style=label.style_label_left, textcolor=color.white, size=size.tiny)
+    lbl_tp3 := label.new(bar_index + 5, tp3_level, "TP3", color=color.green, style=label.style_label_left, textcolor=color.white, size=size.tiny)
+
+label.set_x(lbl_sl, bar_index + 5)
+label.set_y(lbl_sl, sl_level)
+label.set_x(lbl_tp3, bar_index + 5)
+label.set_y(lbl_tp3, tp3_level)

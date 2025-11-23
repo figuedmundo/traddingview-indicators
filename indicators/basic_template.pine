@@ -1,0 +1,12 @@
+//@version=6
+indicator("Mi Primer Indicador", overlay=true)
+
+// Input options
+len = input.int(14, "Length", minval=1)
+src = input.source(close, "Source")
+
+// Calculation
+ma = ta.sma(src, len)
+
+// Plotting
+plot(ma, "SMA", color=color.blue)
