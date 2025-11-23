@@ -3,7 +3,7 @@
 // Upgraded to v6 by Gemini
 
 //@version=6
-indicator(title='Trend Following Setup - Sideways Market Skipper Scanner', shorttitle='Sideways Skip Scan', overlay=false, max_bars_back=500)
+indicator(title='Trend Following Setup - Sideways Market Skipper Scanner', shorttitle='SkipScan', overlay=false, max_bars_back=500)
 
 //_____________________________ Menu Scanner Start
 
@@ -192,7 +192,7 @@ range_source = i_atr_range_choice == 'Type Points' ? i_atr_range_points :range_i
 // Function to calculate Daily Cumulative Percentage Change of Close Price
 cumulative_percentage_change() =>
     var float _cum_pct_change = na
-    _is_new_day = ta.change(time('D')) != 0 ? 1 : 0
+    bool _is_new_day = ta.change(time('D')) != 0
     _daily_pct_change = na(close[1]) ? 0 : (close - close[1]) / close[1] * 100
     _cum_pct_change := _is_new_day ? _daily_pct_change : (na(_cum_pct_change) ? _daily_pct_change : (_cum_pct_change + _daily_pct_change))
     _cum_pct_change
@@ -207,7 +207,7 @@ cum_pchg = cumulative_percentage_change()
 // Function to calculate Daily Cumulative Volume
 cumulative_volume() =>
     var float _cum_vol = na
-    _is_new_day = ta.change(time('D')) != 0 ? 1 : 0
+    bool _is_new_day = ta.change(time('D')) != 0
     _cum_vol := _is_new_day ? volume : (na(_cum_vol) ? volume : (_cum_vol + volume))
     _cum_vol
 
